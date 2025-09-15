@@ -31,13 +31,10 @@ function manhattan(a, b) {
   return Math.abs(a[0] - b[0]) + Math.abs(a[1] - b[1]);
 }
 
-// Reconstruct path from parent map (key -> parentKey)
 function reconstructPath(parent, finalKey) {
   const path = [];
   let cur = finalKey;
   while (cur != null) {
-    const [r, c] = cur.split(",").map((x, idx) => Number(x)); // finalKey is "r,c,b" but split and ignore battery below
-    // Actually cur looks like "r,c,b" -> we need only first two
     const parts = cur.split(",").map(Number);
     path.push([parts[0], parts[1]]);
     cur = parent.get(cur);
@@ -70,7 +67,6 @@ export function runDFS({ grid, start, goal, battery }) {
         return { visitedOrder, path, nodesExpanded: visitedOrder.length, finalBattery: node.b };
     }
 
-    // push neighbors (order: up, right, down, left -> reversed if you want different behavior)
     const neighs = neighbors(node.r, node.c);
     for (let i = neighs.length - 1; i >= 0; i--) {
       const [nr, nc] = neighs[i];
@@ -131,7 +127,7 @@ export function runBFS({ grid, start, goal, battery }) {
   return { visitedOrder, path: [], nodesExpanded: visitedOrder.length, finalBattery: null };
 }
 
-// Best-First Search (greedy using Manhattan heuristic)
+// Best-First Search (greedy using Manhattan to nearest goal)
 export function runBestFS({ grid, start, goal, battery }) {
   const rows = grid.length, cols = grid[0].length;
   const heap = new MinHeap();
@@ -139,8 +135,20 @@ export function runBestFS({ grid, start, goal, battery }) {
   const parent = new Map();
   const visitedOrder = [];
 
+  // collect all goal cells
+  const goals = [];
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      if (grid[r][c] === "G") goals.push([r, c]);
+    }
+  }
+  // fallback to provided goal if none found in grid
+  if (goals.length === 0 && Array.isArray(goal)) goals.push(goal);
+
+  const h = ([r, c]) => Math.min(...goals.map(g => manhattan([r, c], g)));
+
   const startKey = key(start[0], start[1], battery);
-  heap.push({ r: start[0], c: start[1], b: battery }, manhattan(start, goal));
+  heap.push({ r: start[0], c: start[1], b: battery }, h(start));
   parent.set(startKey, null);
 
   while (heap.size() > 0) {
@@ -165,7 +173,7 @@ export function runBestFS({ grid, start, goal, battery }) {
       const nk = key(nr, nc, nb);
       if (!visited.has(nk) && !parent.has(nk)) {
         parent.set(nk, k);
-        heap.push({ r: nr, c: nc, b: nb }, manhattan([nr, nc], goal));
+        heap.push({ r: nr, c: nc, b: nb }, h([nr, nc]));
       }
     }
   }

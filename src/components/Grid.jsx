@@ -4,7 +4,7 @@ import Cell from "./Cell";
 export default function Grid({ grid, start, goal, onCellClick, visual }) {
   return (
     <div>
-      <div className="grid gap-1" style={{ gridTemplateColumns: `repeat(${grid[0].length}, 48px)` }}>
+      <div className="grid gap-1" style={{ gridTemplateColumns: `repeat(${grid[0].length}, 44px)` }}>
         {grid.map((row, r) =>
           row.map((val, c) => {
             const key = `${r},${c}`;

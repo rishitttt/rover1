@@ -1,6 +1,8 @@
 import React, { useState, useRef } from "react";
 import Grid from "./components/Grid";
 import { runDFS, runBFS, runBestFS } from "./utils/algorithms";
+import bgArcade from "./assets/smai bd.png";
+import roverPng from "./assets/smai rover.png";
 
 const DEFAULT_ROWS = 6;
 const DEFAULT_COLS = 6;
@@ -13,7 +15,7 @@ function makeDefaultGrid(rows = DEFAULT_ROWS, cols = DEFAULT_COLS) {
     ["F", "H", "F", "F", "D", "F"],
     ["H", "D", "H", "F", "H", "F"],
     ["F", "F", "D", "H", "F", "F"],
-    ["F", "H", "F", "D", "H", "F"],
+    ["F", "H", "F", "D", "G", "F"],
     ["D", "F", "F", "H", "F", "H"],
     ["F", "D", "H", "F", "H", "G"]
   ];
@@ -27,14 +29,20 @@ export default function App() {
   const [speed, setSpeed] = useState(DEFAULT_SPEED);
   const [running, setRunning] = useState(false);
   const [message, setMessage] = useState("");
+  const [nodesExpanded, setNodesExpanded] = useState(0);
   const animRef = useRef(null); // to cancel if needed
 
   // visual state: maps "r,c" -> {visited:true, battery, stepIndex}
   const [visual, setVisual] = useState({ visited: {}, path: {} });
+  const [finalPath, setFinalPath] = useState([]);
+  const [roverStep, setRoverStep] = useState(-1);
 
   function resetVisual() {
     setVisual({ visited: {}, path: {} });
     setMessage("");
+    setFinalPath([]);
+    setRoverStep(-1);
+    setNodesExpanded(0);
   }
 
   function setGridCell(r, c, value) {
@@ -48,13 +56,18 @@ export default function App() {
   async function animateRun(result) {
     if (!result) {
       setMessage("No path found.");
+      setRunning(false);
       return;
     }
-    const { visitedOrder, path, nodesExpanded, finalBattery } = result;
-    setMessage(`Nodes expanded: ${nodesExpanded} — Path length: ${path.length} — Final battery: ${finalBattery ?? "N/A"}`);
+    const { visitedOrder, path, nodesExpanded: totalNodes, finalBattery } = result;
+    setNodesExpanded(0);
+    setMessage(`Nodes expanded: ${totalNodes} — Path length: ${path.length} — Final battery: ${finalBattery ?? "N/A"}`);
     setVisual({ visited: {}, path: {} });
     setRunning(true);
-    // animate visit order
+    setFinalPath(path);
+    setRoverStep(-1); // hide rover until path-follow starts
+
+    // animate visit order (live update counter)
     for (let i = 0; i < visitedOrder.length; i++) {
       const s = visitedOrder[i];
       setVisual(prev => {
@@ -62,7 +75,7 @@ export default function App() {
         newVisited[`${s.r},${s.c}`] = { battery: s.battery, step: i };
         return { ...prev, visited: newVisited };
       });
-      // allow interruption
+      setNodesExpanded(i + 1);
       await new Promise(res => animRef.current = setTimeout(res, speed));
     }
 
@@ -75,6 +88,12 @@ export default function App() {
         return { ...prev, path: newPath };
       });
       await new Promise(res => animRef.current = setTimeout(res, Math.max(30, speed/1.5)));
+    }
+
+    // move rover along final path (slower)
+    for (let i = 0; i < path.length; i++) {
+      setRoverStep(i);
+      await new Promise(res => animRef.current = setTimeout(res, Math.max(150, Math.round(speed * 1.5))));
     }
 
     setRunning(false);
@@ -114,85 +133,69 @@ export default function App() {
     resetVisual();
   }
 
+  const cellSize = 44;
+  const roverSize = 70;
+
+  const roverStyle = () => {
+    if (roverStep < 0 || !finalPath.length) return { display: 'none' };
+    const [r, c] = finalPath[roverStep];
+    const left = c * cellSize + (cellSize - roverSize) / 2;
+    const top = r * cellSize + (cellSize - roverSize) / 2;
+    return { left: left + 'px', top: top + 'px', width: roverSize + 'px', height: roverSize + 'px' };
+  };
+
   return (
-    <div className="min-h-screen p-6 bg-[#0a0a0a] crt">
-      <div className="max-w-5xl mx-auto">
-        <h1 className="text-xl md:text-2xl font-semibold mb-4 retro-title">Martian Rover — Pathfinding Visualizer</h1>
+    <div className="bg-arcade-image" style={{ backgroundImage: `url(${bgArcade})` }}>
+      <div className="overlay-stage">
 
-        <div className="flex flex-col gap-4 md:flex-row mb-4">
-          <div className="p-4 panel pixel-border flex items-center gap-4">
-            <label className="flex items-center gap-2 retro-subtle">
-              Battery:
-              <input type="number" value={battery} min={0} onChange={e => setBattery(Number(e.target.value))} className="border-2 border-black bg-[#0f0f0f] text-[#caffdd] px-2 py-1 w-20"/>
-            </label>
-            <label className="flex items-center gap-2 retro-subtle">
-              Speed:
-              <input type="range" min="10" max="400" value={speed} onChange={e => setSpeed(Number(e.target.value))} />
-              <span className="w-16 text-right">{speed}ms</span>
-            </label>
-            <div className="flex gap-2">
-              <button disabled={running} onClick={() => handleRun("DFS")} className="retro-btn pink">Run DFS</button>
-              <button disabled={running} onClick={() => handleRun("BFS")} className="retro-btn pink">Run BFS</button>
-              <button disabled={running} onClick={() => handleRun("BEST")} className="retro-btn pink">Run BestFS</button>
-            </div>
-            <div className="flex gap-2 ml-0 md:ml-4">
-              <button onClick={handleClearPath} className="retro-btn yellow">Clear Path</button>
-              <button onClick={handleResetGrid} className="retro-btn green">Reset Grid</button>
-            </div>
-          </div>
-
-          <div className="p-3 panel pixel-border flex-1">
-            <div className="text-xs md:text-sm retro-subtle">Instructions: Click cells to cycle: <span className="font-semibold text-[#2affd6]">F → H → D → G → F</span>. Click 'Run ...' to animate.</div>
-            <div className="mt-2 text-[10px] md:text-xs retro-subtle">Start is fixed at (0,0) cyan. Goal default is neon green (you can change by clicking a cell to set 'G').</div>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className="p-4 grid-frame pixel-border overflow-auto">
+        <div className="machine-screen-overlay">
+          <div className="grid-wrap">
+            <img src={roverPng} alt="rover" className="rover-sprite" style={roverStyle()} />
             <Grid
               grid={grid}
               start={start}
               goal={goal}
               onCellClick={(r,c, val) => {
-                // cycle cell value
                 const cycle = { F: "H", H: "D", D: "G", G: "F" };
                 const newVal = cycle[val] ?? "F";
-                // if placing a new goal, clear old goal cell
                 if (newVal === "G") {
-                  // just set cell as goal, don't clear old goals
                   setGridCell(r, c, "G");
                 } else {
                   setGridCell(r, c, newVal);
-                }                
+                }
                 resetVisual();
               }}
               visual={visual}
             />
           </div>
+        </div>
 
-          <div className="p-4 panel pixel-border">
-            <h2 className="font-medium mb-3 retro-title text-base">Legend & Stats</h2>
-            <div className="flex gap-2 items-center mb-3">
-              <div className="w-6 h-6 bg-slate-300 legend-swatch" /> <div>Flat (F) — cost 2</div>
-            </div>
-            <div className="flex gap-2 items-center mb-3">
-              <div className="w-6 h-6 bg-amber-700 legend-swatch" /> <div>Hill (H) — cost 4</div>
-            </div>
-            <div className="flex gap-2 items-center mb-3">
-              <div className="w-6 h-6 bg-black legend-swatch" /> <div>Ditch (D) — impassable</div>
-            </div>
-            <div className="flex gap-2 items-center mb-3">
-              <div className="w-6 h-6 bg-green-500 legend-swatch" /> <div>Goal (G)</div>
-            </div>
-            <div className="flex gap-2 items-center mb-3">
-              <div className="w-6 h-6 bg-sky-500 legend-swatch" /> <div>Start (0,0)</div>
-            </div>
+        {/* Invisible hotspots (no labels) */}
+        <button disabled={running} onClick={() => handleRun("DFS")} className="hotspot hot-dfs" aria-label="Run DFS" />
+        <button disabled={running} onClick={() => handleRun("BFS")} className="hotspot hot-bfs" aria-label="Run BFS" />
+        <button disabled={running} onClick={() => handleRun("BEST")} className="hotspot hot-best" aria-label="Run BestFS" />
+        <button onClick={handleClearPath} className="hotspot hot-clear" aria-label="Clear Path" />
+        <button onClick={handleResetGrid} className="hotspot hot-reset" aria-label="Reset Grid" />
 
-            <div className="mt-4">
-              <h3 className="font-semibold retro-title text-sm">Status</h3>
-              <div className="mt-2 text-xs">{message || "Idle"}</div>
+        {/* Battery HUD fixed bottom-right with icon; buttons inline left/right */}
+        <div className="battery-hud pixel-font" role="status" aria-live="polite">
+          <div className="value" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <button className="hud-btn" aria-label="Decrease battery" onClick={() => setBattery(b => Math.max(0, b - 1))}>{'<'}</button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <svg width="18" height="10" viewBox="0 0 18 10" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                <rect x="1" y="2" width="14" height="6" rx="1" fill="#0a0a0a" stroke="#ffffff" strokeWidth="1"/>
+                <rect x="16" y="4" width="2" height="2" fill="#ffffff"/>
+              </svg>
+              {battery}
             </div>
+            <button className="hud-btn" aria-label="Increase battery" onClick={() => setBattery(b => b + 1)}>{'>'}</button>
           </div>
+        </div>
+
+        {/* Nodes counter live (pixel font) */}
+        <div className="nodes-counter pixel-font" aria-hidden="true">
+          <div className="label">NODES:</div>
+          <div className="value">{nodesExpanded}</div>
         </div>
 
       </div>
