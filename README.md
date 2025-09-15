@@ -1,6 +1,7 @@
 # rover1
 
 A retro arcade-style Martian rover pathfinding visualizer built with React + Vite.
+https://rishitttt.github.io/rover1/ 
 
 ## Features
 - Arcade cabinet UI over a custom background
